@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A sample template
+Resources:
+  # 立ち上げたいリソースを定義していく
+  # http://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html
+
+  MyVpc:
+    Type: "AWS::EC2::VPC"
+    Properties: 
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: MyVPC
+  
+  MyIGW:
+    Type: "AWS::EC2::InternetGateway"
+    DependsOn: MyVpc
+    Properties: 
+      Tags:
+        - Key: Name
+          Value: MyIGW
+
+  # InternetGateWayとVPCを関連付ける
+  VPCGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    DependsOn: MyIGW
+    Properties: 
+      VpcId:
+        Ref: MyVpc
+      InternetGatewayId:
+        Ref: MyIGW
+  
+  # 踏み台サーバーを配備するサブネット
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    DependsOn: MyVpc
+    Properties:
+      VpcId:
+        Ref: MyVpc
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "us-east-1a"
+      Tags:
+      - Key: Name
+        Value: publicSubnet
+  
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: MyVpc
+    Properties:
+      VpcId:
+        Ref: MyVpc
+      Tags:
+      - Key: Name
+        Value: publicRouteTable
+  
+  # ルートテーブルにpublicサブネットへのルートを登録する
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: PublicRouteTable
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: MyIGW
+
+  # ルートテーブルとサブネットを関連付ける
+  RouteToPublic:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicRouteTable
+    Properties: 
+      RouteTableId: 
+        Ref: PublicRouteTable
+      SubnetId: 
+        Ref: PublicSubnet
+  
+  # SSH接続を許可するセキュリティグループ
+  SshSG:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: MyVpc
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      VpcId:
+        Ref: MyVpc
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+  
+  # 踏み台サーバーのEC2インスタンス
+  # SSH接続に用いるKeyPairは予め用意しておく
+  BastionInstance: 
+    Type: AWS::EC2::Instance
+    DependsOn: SshSG
+    Properties: 
+      InstanceType: t2.nano
+      ImageId: ami-55ef662f
+      KeyName: sampleSSH
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:  
+            - Ref: SshSG
+          SubnetId: 
+            Ref: PublicSubnet
+      Tags:
+        - Key: Name
+          Value: bastion
+
+  # 踏み台サーバーにはElasticIPでアクセスする
+  BastionInstanceEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: BastionInstance
+    Properties:
+      Domain: vpc
+      InstanceId: 
+        Ref: BastionInstance
+
+
+      
+    
