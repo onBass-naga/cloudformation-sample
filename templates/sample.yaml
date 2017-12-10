@@ -1,54 +1,54 @@
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: 2010-09-09
 Description: A sample template
 Resources:
   # 立ち上げたいリソースを定義していく
   # http://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html
 
-  MyVpc:
-    Type: "AWS::EC2::VPC"
+  VPC:
+    Type: AWS::EC2::VPC
     Properties: 
       CidrBlock: 10.0.0.0/16
       Tags:
         - Key: Name
-          Value: MyVPC
+          Value: VPC
   
-  MyIGW:
-    Type: "AWS::EC2::InternetGateway"
-    DependsOn: MyVpc
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
     Properties: 
       Tags:
         - Key: Name
-          Value: MyIGW
+          Value: SampleInternetGateway
 
   # InternetGateWayとVPCを関連付ける
   VPCGatewayAttachment:
-    Type: "AWS::EC2::VPCGatewayAttachment"
-    DependsOn: MyIGW
+    Type: AWS::EC2::VPCGatewayAttachment
+    DependsOn: InternetGateway
     Properties: 
       VpcId:
-        Ref: MyVpc
+        Ref: VPC
       InternetGatewayId:
-        Ref: MyIGW
+        Ref: InternetGateway
   
   # 踏み台サーバーを配備するサブネット
   PublicSubnet:
     Type: AWS::EC2::Subnet
-    DependsOn: MyVpc
+    DependsOn: VPC
     Properties:
       VpcId:
-        Ref: MyVpc
+        Ref: VPC
       CidrBlock: 10.0.0.0/24
-      AvailabilityZone: "us-east-1a"
+      AvailabilityZone: us-east-1a
       Tags:
       - Key: Name
         Value: publicSubnet
   
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
-    DependsOn: MyVpc
+    DependsOn: VPC
     Properties:
       VpcId:
-        Ref: MyVpc
+        Ref: VPC
       Tags:
       - Key: Name
         Value: publicRouteTable
@@ -62,10 +62,10 @@ Resources:
         Ref: PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId:
-        Ref: MyIGW
+        Ref: InternetGateway
 
   # ルートテーブルとサブネットを関連付ける
-  RouteToPublic:
+  RouteToPublicSubnet:
     Type: AWS::EC2::SubnetRouteTableAssociation
     DependsOn: PublicRouteTable
     Properties: 
@@ -75,13 +75,13 @@ Resources:
         Ref: PublicSubnet
   
   # SSH接続を許可するセキュリティグループ
-  SshSG:
+  SSHSecurityGroup:
     Type: AWS::EC2::SecurityGroup
-    DependsOn: MyVpc
+    DependsOn: VPC
     Properties:
       GroupDescription: Enable SSH access via port 22
       VpcId:
-        Ref: MyVpc
+        Ref: VPC
       SecurityGroupIngress:
         - IpProtocol: TCP
           FromPort: '22'
@@ -92,7 +92,7 @@ Resources:
   # SSH接続に用いるKeyPairは予め用意しておく
   BastionInstance: 
     Type: AWS::EC2::Instance
-    DependsOn: SshSG
+    DependsOn: SSHSecurityGroup
     Properties: 
       InstanceType: t2.nano
       ImageId: ami-55ef662f
@@ -101,7 +101,8 @@ Resources:
         - AssociatePublicIpAddress: true
           DeviceIndex: 0
           GroupSet:  
-            - Ref: SshSG
+            - Ref: SSHSecurityGroup
+            - Ref: PublicWebSecurityGroup
           SubnetId: 
             Ref: PublicSubnet
       Tags:
@@ -116,6 +117,149 @@ Resources:
       Domain: vpc
       InstanceId: 
         Ref: BastionInstance
+  
+  # DB用サブネットはAZが異なるサブネットが最低2つ必要
+  DatastoreSubnet1a: 
+    Type: AWS::EC2::Subnet
+    DependsOn: PrivateRouteTable
+    Properties: 
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: us-east-1a
+      Tags: 
+        - Key: Name 
+          Value: db-us-east-1a
+      
+  DatastoreSubnet1c: 
+    Type: AWS::EC2::Subnet
+    DependsOn: PrivateRouteTable
+    Properties: 
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: us-east-1c
+      Tags: 
+        - Key: Name 
+          Value: db-us-east-1c    
+
+  DatastoreSubnet1aRouteTableAssociation: 
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: DatastoreSubnet1a
+    Properties: 
+      SubnetId:  
+        Ref: DatastoreSubnet1a 
+      RouteTableId:
+        Ref: PrivateRouteTable
+
+  DatastoreSubnet1cRouteTableAssociation: 
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: DatastoreSubnet1c
+    Properties: 
+      SubnetId:  
+        Ref: DatastoreSubnet1c 
+      RouteTableId:
+        Ref: PrivateRouteTable
+  
+  # プライベートサブネット用のルートテーブル
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: privateRouteTable
+
+  # インターネットからのhttp/httpsアクセスを許可する
+  PublicWebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: VPC
+    Properties:
+      GroupDescription: Enable access via internet gateway
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: TCP
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+  
+  # PublicWebSecurityGroupと踏み台からのアクセスを許可する
+  PrivateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: PublicWebSecurityGroup
+    Properties:
+      GroupDescription: Enable access via public security group
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: 
+            Ref: PublicWebSecurityGroup
+        - IpProtocol: UDP
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: 
+            Ref: PublicWebSecurityGroup
+        - IpProtocol: ICMP
+          FromPort: -1
+          ToPort: -1
+          SourceSecurityGroupId: 
+            Ref: PublicWebSecurityGroup
+  
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    DependsOn: PrivateRouteTable
+    Properties:
+      DBSubnetGroupDescription: Database subnets for RDS
+      SubnetIds:
+        - Ref: DatastoreSubnet1a
+        - Ref: DatastoreSubnet1c
+  
+  MyDBParamGroup:
+    Type: AWS::RDS::DBParameterGroup
+    DependsOn: DBSubnetGroup
+    Properties:
+      Description: Default parameter group
+      Family: MySQL5.6
+      Parameters:
+        character_set_database: utf8mb4
+        character_set_client: utf8mb4
+        character_set_connection: utf8mb4
+        character_set_results: utf8mb4
+        character_set_server: utf8mb4
+        skip-character-set-client-handshake: true
+
+  # MySQLインスタンス
+  DbInstance: 
+    Type: AWS::RDS::DBInstance
+    DependsOn: DBSubnetGroup
+    DeletionPolicy: Snapshot
+    Properties: 
+      Engine: MySQL
+      EngineVersion: 5.6.37
+      MultiAZ: false
+      AllocatedStorage: 20
+      DBInstanceClass: db.t2.micro
+      DBInstanceIdentifier: sample
+      DBName: sample_db
+      MasterUsername: root
+      MasterUserPassword: password
+      DBParameterGroupName:
+        Ref: MyDBParamGroup
+      DBSubnetGroupName:
+        Ref: DBSubnetGroup 
+      VPCSecurityGroups:
+        - Ref: PrivateSecurityGroup
+
 
 
       
