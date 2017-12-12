@@ -1,5 +1,10 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: A sample template
+Parameters:
+  BastionEIPAllocationId:
+    Description: EIP AllocationId for BastionInstance
+    Type: String
+
 Resources:
   # 立ち上げたいリソースを定義していく
   # http://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html
@@ -108,13 +113,13 @@ Resources:
       Tags:
         - Key: Name
           Value: bastion
-
-  # 踏み台サーバーにはElasticIPでアクセスする
-  BastionInstanceEIP:
-    Type: AWS::EC2::EIP
+  
+  BastionEIPAssociation:
+    Type: "AWS::EC2::EIPAssociation"
     DependsOn: BastionInstance
     Properties:
-      Domain: vpc
+      AllocationId: 
+        Ref: BastionEIPAllocationId
       InstanceId: 
         Ref: BastionInstance
   
