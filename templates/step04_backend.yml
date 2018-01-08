@@ -1,0 +1,49 @@
+
+
+  # Elastic Beanstalk アプリケーションの構築
+  MyApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    ApplicationName: Sample
+    VersionLifecycleConfig:
+      MaxCountRule: 10
+    Properties:
+      Description: AWS Elastic Beanstalk Sample Application
+
+  # MyApplicationVersion:
+  #   Type: AWS::ElasticBeanstalk::ApplicationVersion
+  #   Properties:
+  #     ApplicationName:
+  #       Ref: MyApplication
+  #     Description: AWS ElasticBeanstalk Sample Application Version
+  #     SourceBundle:
+  #       S3Bucket: !Sub "elasticbeanstalk-samples-${AWS::Region}"
+  #       S3Key: php-sample.zip
+
+  AppConfigurationTemplate:
+    Type: AWS::ElasticBeanstalk::ConfigurationTemplate
+    Properties:
+      ApplicationName:
+        Ref: MyApplication
+      Description: AWS ElasticBeanstalk Sample Configuration Template
+      OptionSettings:
+      - Namespace: aws:autoscaling:asg
+        OptionName: MinSize
+        Value: '1'
+      - Namespace: aws:autoscaling:asg
+        OptionName: MaxSize
+        Value: '2'
+      - Namespace: aws:elasticbeanstalk:environment
+        OptionName: EnvironmentType
+        Value: LoadBalanced
+      SolutionStackName: Single Container Docker 17.06 version 2.8.0
+
+  AppEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName:
+        Ref: MyApplication
+      Description: AWS ElasticBeanstalk Sample Environment
+      TemplateName:
+        Ref: AppConfigurationTemplate
+      VersionLabel:
+        Ref: sampleApplicationVersion

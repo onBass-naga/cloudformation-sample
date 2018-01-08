@@ -1,0 +1,104 @@
+
+  # NatGateWayに割り当てるElasticIP
+  NatEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: PrivateRouteTable
+    Properties:
+      Domain: vpc
+  
+  # NatGateWayをパブリックサブネットに配備
+  NatGateWay:
+    Type: AWS::EC2::NatGateway
+    DependsOn: NatEIP
+    Properties: 
+      AllocationId:
+        Fn::GetAtt:
+        - NatEIP
+        - AllocationId
+      SubnetId: 
+        Ref: PublicSubnetA
+      Tags: 
+        - Key: Name
+          Value: SampleNatGateWay
+
+  # PublicSubnetからのみアクセスを許可するサブネット
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    DependsOn: VPC
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: us-east-1a
+      Tags:
+      - Key: Name
+        Value: PrivateSubnetA
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    DependsOn: VPC
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.5.0/24
+      AvailabilityZone: us-east-1b
+      Tags:
+      - Key: Name
+        Value: PrivateSubnetB
+
+  # プライベートサブネット用のルートテーブル
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRouteTable
+
+  # NatGateWayへのRouteを追加
+  NGWRoute:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateWay
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGateWay
+
+  # ルートテーブルとサブネットを関連付ける
+  RouteToPrivateSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PrivateRouteTable
+    Properties: 
+      RouteTableId: 
+        Ref: PrivateRouteTable
+      SubnetId: 
+        Ref: PrivateSubnetA
+
+  RouteToPrivateSubnetB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PrivateRouteTable
+    Properties: 
+      RouteTableId: 
+        Ref: PrivateRouteTable
+      SubnetId: 
+        Ref: PrivateSubnetB
+
+  # PublicSubnetからのみアクセスを許可する
+  PrivateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: PublicSecurityGroup
+    Properties:
+      GroupDescription: Enable access via PublicSecurityGroup
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: 
+            Ref: PublicSecurityGroup
+
