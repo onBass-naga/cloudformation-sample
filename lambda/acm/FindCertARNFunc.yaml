@@ -5,6 +5,7 @@ Parameters:
   DomainName:
     Description: The name to find certificate
     Type: String
+    MinLength: '1'
     ConstraintDescription: required.
   Region:
     Description: The region to send requests
