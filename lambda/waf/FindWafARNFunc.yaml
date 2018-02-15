@@ -1,37 +1,36 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Export the certification ARN found by DomainName'
+Description: 'Export the WebACL ARN found by Name'
 Parameters:
-  DomainName:
-    Description: The name to find certificate
+  Name:
+    Description: The name to find acl
     Type: String
     MinLength: '1'
     ConstraintDescription: required.
   Region:
     Description: The region to send requests
     Type: String
-    Default: us-east-1
   ExportName:
     Description: The name of the result
     Type: String
-    Default: CertificateArn
+    Default: WebACLArn
   S3Bucket:
     Description: The name of the bucket that contains your packaged source
     Type: String
   S3Key:
     Description: The name of the ZIP package
     Type: String
-    Default: lambda/acm/findCertARN.zip
+    Default: lambda/waf/findWafARN.zip
 Resources:
-  CertArn:
-    Type: Custom::CertArn
+  Arn:
+    Type: Custom::Arn
     Properties:
       ServiceToken:
         Fn::GetAtt:
         - Function
         - Arn
       Region: !Ref Region
-      DomainName: !Ref DomainName
+      Name: !Ref Name
   Function:
     Type: AWS::Lambda::Function
     Properties:
@@ -41,7 +40,7 @@ Resources:
       Handler:
         Fn::Join:
         - ''
-        - - "findCertARN"
+        - - "findWafARN"
           - ".handler"
       Role:
         Fn::GetAtt:
@@ -75,16 +74,16 @@ Resources:
             Resource: arn:aws:logs:*:*:*
           - Effect: Allow
             Action:
-            - acm:DescribeCertificate
-            - acm:ListCertificates
-            - acm:GetCertificate
-            - acm:ListTagsForCertificate
+            - waf:Get*
+            - waf:List*
+            - waf-regional:Get*
+            - waf-regional:List*
             Resource: "*"
 Outputs:
-  CertificateArn:
+  WebACLArn:
     Value:
       Fn::GetAtt:
-      - CertArn
-      - CertificateArn
+      - Arn
+      - WebACLId
     Export:
       Name: !Ref ExportName
