@@ -1,0 +1,89 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Export the WebACL ARN found by Name'
+Parameters:
+  Name:
+    Description: The name to find acl
+    Type: String
+    MinLength: '1'
+    ConstraintDescription: required.
+  Region:
+    Description: The region to send requests
+    Type: String
+  ExportName:
+    Description: The name of the result
+    Type: String
+    Default: WebACLArn
+  S3Bucket:
+    Description: The name of the bucket that contains your packaged source
+    Type: String
+  S3Key:
+    Description: The name of the ZIP package
+    Type: String
+    Default: lambda/waf/findWafARN.zip
+Resources:
+  Arn:
+    Type: Custom::Arn
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+        - Function
+        - Arn
+      Region: !Ref Region
+      Name: !Ref Name
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: !Ref S3Key
+      Handler:
+        Fn::Join:
+        - ''
+        - - "findWafARN"
+          - ".handler"
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      Runtime: nodejs6.10
+      Timeout: '10'
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+            - waf:Get*
+            - waf:List*
+            - waf-regional:Get*
+            - waf-regional:List*
+            Resource: "*"
+Outputs:
+  WebACLArn:
+    Value:
+      Fn::GetAtt:
+      - Arn
+      - WebACLId
+    Export:
+      Name: !Ref ExportName
